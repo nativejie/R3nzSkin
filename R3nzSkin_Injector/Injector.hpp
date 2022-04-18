@@ -7,6 +7,8 @@
 #include <vector>
 
 using namespace std::chrono_literals;
+// vector是C++标准模板库中的部分内容，它是一个多功能的，能够操作多种数据结构和算法的模板类和函数库。vector之所以被认为是一个容器，是因为它能够像容器一样存放各种类型的对象，简单地说，vector是一个能够存放任意类型的动态数组，能够增加和压缩数据。
+// unit32_t  typedef 定义的无符号 int 型宏定义
 using proclist_t = std::vector<std::uint32_t>;
 
 struct NtCreateThreadExBuffer {
