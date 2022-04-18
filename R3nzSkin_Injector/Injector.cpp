@@ -153,6 +153,11 @@ bool WINAPI Injector::inject(const std::uint32_t pid) noexcept
 	}
 
 	// VirtualAllocEx 在指定进程的虚拟地址空间内保留、提交或更改内存区域的状态。该函数将其分配的内存初始化为零
+	// wchar_t数据类型一般为16位或32位，但不同的C或C++库有不同的规定，如GNU Libc规定wchar_t为32位，总之，wchar_t所能表示的字符数远超char型。
+	// 参数2：为要分配的页面区域指定所需起始地址的指针   参数3：要分配的内存区域的大小，以字节为单位  
+	// 参数4：MEM_COMMIT 为指定的保留内存页面分配内存费用（来自内存的整体大小和磁盘上的页面文件）。该函数还保证当调用者稍后最初访问内存时，内容将为零。除非/直到实际访问虚拟地址，否则不会分配实际的物理页面。
+	// MEM_RESERVE 保留进程的虚拟地址空间范围，而不在内存或磁盘上的页面文件中分配任何实际物理存储。
+	// 参数5：PAGE_READWRITE 要分配的页面区域的内存保护。如果页面正在提交，您可以指定任何一个 内存保护常量
 	const auto dll_path_remote{ ::VirtualAllocEx(handle, nullptr, (dll_path.size() + 1) * sizeof(wchar_t), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) };
 
 	if (!dll_path_remote) {
@@ -160,21 +165,28 @@ bool WINAPI Injector::inject(const std::uint32_t pid) noexcept
 		return false;
 	}
 
+	// 此函数能写入某一进程的内存区域（直接写入会出Access Violation错误），故需此函数入口区必须可以访问，否则操作将失败
 	if (!::WriteProcessMemory(handle, dll_path_remote, dll_path.data(), (dll_path.size() + 1) * sizeof(wchar_t), nullptr)) {
+		// VirtualFreeEx即为目标进程的句柄，可在其它进程中释放申请的虚拟内存空间
 		::VirtualFreeEx(handle, dll_path_remote, 0u, MEM_RELEASE);
 		::CloseHandle(handle);
 		return false;
 	}
 
 	HANDLE thread;
+	// 参数1：线程  2：线程权限 3. ObjectAttributes 4. 进程handle 5：参数
+	// GetModuleHandle 功能是获取一个应用程序或动态链接库的模块句柄
+	// GetProcAddress 功能是检索指定的动态链接库(DLL)中的输出库函数地址
 	NtCreateThreadEx(&thread, GENERIC_ALL, NULL, handle, reinterpret_cast<LPTHREAD_START_ROUTINE>(::GetProcAddress(::GetModuleHandle(L"kernel32.dll"), "LoadLibraryW")), dll_path_remote, FALSE, NULL, NULL, NULL, &ntbuffer);
 
 	if (!thread || thread == INVALID_HANDLE_VALUE) {
+		// 释放
 		::VirtualFreeEx(handle, dll_path_remote, 0u, MEM_RELEASE);
 		::CloseHandle(handle);
 		return false;
 	}
 
+	// 等待，直到指定对象处于有信号状态或超时间隔过去。使用WaitForSingleObjectEx函数进入alertable等待状态。要等待多个对象，请使用WaitForMultipleObjects。
 	::WaitForSingleObject(thread, INFINITE);
 	::CloseHandle(thread);
 	::VirtualFreeEx(handle, dll_path_remote, 0u, MEM_RELEASE);
@@ -182,6 +194,10 @@ bool WINAPI Injector::inject(const std::uint32_t pid) noexcept
 	return true;
 }
 
+/**
+ * @brief 启用调试
+ * 
+ */
 void WINAPI Injector::enableDebugPrivilege() noexcept
 {
 	HANDLE token;
@@ -228,12 +244,14 @@ void Injector::run() noexcept
 	enableDebugPrivilege();
 
 	while (true) {
+		// 查找LOL进程
 		const auto& league_client_processes{ Injector::findProcesses(L"LeagueClient.exe") };
 		const auto& league_processes{ Injector::findProcesses(L"League of Legends.exe") };
 
 		R3nzSkinInjector::gameState = (league_processes.size() > 0) ? true : false;
 		R3nzSkinInjector::clientState = (league_client_processes.size() > 0) ? true : false;
 
+		// 开始注入
 		for (auto& pid : league_processes) {
 			if (!Injector::isInjected(pid)) {
 				R3nzSkinInjector::cheatState = false;

@@ -8,6 +8,8 @@
         "deque": "cpp",
         "string": "cpp",
         "vector": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "__threading_support": "cpp",
+        "thread": "cpp"
     }
 }
